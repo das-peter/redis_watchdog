@@ -1,6 +1,28 @@
 <?php
 
 /**
+ * Implements hook_help().
+ */
+function redis_watchdog_help($path, $arg) {
+  switch ($path) {
+    case 'admin/help#redis_watchdog':
+      $output = '';
+      $output .= '<h3>' . t('About') . '</h3>';
+      $output .= '<p>' . t('The Redis Watchdog module logs system events in the a redis database - similar to the <a href="@dblog">Database logging module</a>.', array('@dblog' => 'http://drupal.org/documentation/modules/dblog')) . '</p>';
+      $output .= '<h3>' . t('Uses') . '</h3>';
+      $output .= '<dl>';
+      $output .= '<dt>' . t('Monitoring your site') . '</dt>';
+      $output .= '<dd>' . t('The Redis Watchdog module allows you to view an event log on the <a href="@redislog">Recent log messages</a> page. The log is a chronological list of recorded events containing usage data, performance data, errors, warnings and operational information. Administrators should check the log on a regular basis to ensure their site is working properly.', array('@dblog' => url('admin/reports/redislog'))) . '</dd>';
+      $output .= '<dt>' . t('Debugging site problems') . '</dt>';
+      $output .= '<dd>' . t('In case of errors or problems with the site, the <a href="@dblog">Recent log messages</a> page can be useful for debugging, since it shows the sequence of events. The log messages include usage information, warnings, and errors.', array('@dblog' => url('admin/reports/dblog'))) . '</dd>';
+      $output .= '</dl>';
+      return $output;
+    case 'admin/reports/redislog':
+      return '<p>' . t('The Redis Watchdog module monitors your website, capturing system events in a log (shown here) to be reviewed by an authorized individual at a later time. This log is a list of recorded events containing usage data, performance data, errors, warnings and operational information. It is vital to check the Recent log messages report on a regular basis, as it is often the only way to tell what is going on.') . '</p>';
+  }
+}
+
+/**
  * Implements hook_menu().
  */
 function redis_watchdog_menu() {
@@ -21,6 +43,40 @@ function redis_watchdog_menu() {
     'access arguments' => array('access site reports'),
     'file' => 'redis_watchdog.admin.inc',
   );
+
+  $base_path = 'admin/reports/redislog/';
+  // Provide same overviews as dblog module.
+  if (!module_exists('dblog')) {
+    $base_path = 'admin/reports/redislog/';
+  }
+  $items[$base_path . 'page-not-found'] = array(
+    'title' => "Top 'page not found' errors",
+    'description' => "View 'page not found' errors (404s).",
+    'page callback' => 'redis_watchdog_top',
+    'page arguments' => array('page not found'),
+    'access arguments' => array('access site reports'),
+    'file' => 'redis_watchdog.admin.inc',
+  );
+  $items[$base_path . 'access-denied'] = array(
+    'title' => "Top 'access denied' errors",
+    'description' => "View 'access denied' errors (403s).",
+    'page callback' => 'redis_watchdog_top',
+    'page arguments' => array('access denied'),
+    'access arguments' => array('access site reports'),
+    'file' => 'redis_watchdog.admin.inc',
+  );
+
+  if (module_exists('search')) {
+    $items[$base_path . 'search'] = array(
+      'title' => 'Top search phrases',
+      'description' => 'View most popular search phrases.',
+      'page callback' => 'redis_watchdog_top',
+      'page arguments' => array('search'),
+      'access arguments' => array('access site reports'),
+      'file' => 'redis_watchdog.admin.inc',
+    );
+  }
+
   return $items;
 }
 
@@ -47,4 +103,72 @@ function redis_watchdog_theme() {
       'file' => 'redis_watchdog.admin.inc',
     ),
   );
+}
+
+
+/**
+ * Creates random log entries.
+ */
+function redis_watchdog_create_log_entries($type = NULL, $message = NULL, $variables = array(), $severity = NULL) {
+  static $types, $users;
+  global $base_root;
+
+  if (is_null($type)) {
+    if (!isset($types)) {
+      $types = array(
+        'access denied',
+        'page not found',
+      );
+      $types += array_keys(module_list());
+    }
+    $type = $types[array_rand($types)];
+  }
+  if (is_null($message)) {
+
+    $random_string = function($length) {
+      $values = array_merge(range(65, 90), range(97, 122), range(48, 57));
+      $max = count($values) - 1;
+      $str = chr(mt_rand(97, 122));
+      for ($i = 1; $i < $length; $i++) {
+        $str .= chr($values[mt_rand(0, $max)]);
+      }
+      return $str;
+    };
+
+    $message = $random_string(8) . ': @var1 ';
+    $message .= $random_string(10) . ': !var2 ';
+    $message .= $random_string(12) . ': %var3 ';
+
+    $variables = array(
+      '@var1' => $random_string(5),
+      '!var2' => $random_string(6),
+      '%var3' => $random_string(7),
+    );
+  }
+  if (is_null($severity)) {
+    $severity = rand(0, 7);
+  }
+  if (!isset($users)) {
+    $users = db_select('users')->fields('users', array('uid'))->execute()->fetchCol();
+  }
+  $uid = $users[array_rand($users)];
+  $user = user_load($uid);
+
+  // Prepare the fields to be logged.
+  $log_entry = array(
+    'type'        => $type,
+    'message'     => $message,
+    'variables'   => $variables,
+    'severity'    => $severity,
+    'link'        => '',
+    'user'        => $user,
+    'uid'         => $uid,
+    'request_uri' => $base_root . request_uri(),
+    'referer'     => isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : '',
+    'ip'          => ip_address(),
+    // Request time isn't accurate for long processes, use time() instead.
+    'timestamp'   => strtotime('- ' . rand(0, 300) . ' minutes'),
+  );
+
+  redis_watchdog_watchdog($log_entry);
 }

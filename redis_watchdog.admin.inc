@@ -7,7 +7,6 @@
  * the message details page.
  */
 function redis_watchdog_overview() {
-  $filter = redis_watchdog_build_filter_query();
   $rows = array();
   $classes = array(
     WATCHDOG_DEBUG     => 'dblog-debug',
@@ -20,21 +19,29 @@ function redis_watchdog_overview() {
     WATCHDOG_EMERGENCY => 'dblog-emerg',
   );
 
+  drupal_add_css(drupal_get_path('module', 'redis_watchdog') . '/redis_watchdog.css');
+
   $header = array(
     '', // Icon column.
-    array('data' => t('Type'), 'field' => 'w.type'),
-    array('data' => t('Date'), 'field' => 'w.wid', 'sort' => 'desc'), t('Message'),
-    array('data' => t('User'), 'field' => 'u.name'),
+    array('data' => t('Type'), 'field' => 'type'),
+    array('data' => t('Date'), 'field' => 'timestamp', 'sort' => 'desc'), t('Message'),
+    array('data' => t('User'), 'field' => 'user'),
     array('data' => t('Operations')),
   );
 
-  $log = new RedisLog();
-  foreach ($log->getMultiple(50, 'wid', 'DESC') as $log) {
+  // Use tablesort.
+  $order = tablesort_get_order($header);
+  $direction = tablesort_get_sort($header);
+
+  $log = RedisLog::getInstance();
+  $limit = 50;
+  $page = pager_default_initialize($log->count(), $limit);
+  foreach ($log->getMultiple($limit, $page * $limit, $order['sql'], $direction, 'redis_watchdog_overview_filter_callback') as $log) {
     $rows[] = array(
       'data' => array(
         // Cells.
         array('class' => 'icon'),
-        t($log['type']),
+        l(t($log['type']), 'admin/reports/redislog/event/' . $log['wid']),
         format_date($log['timestamp'], 'short'),
         theme('redis_watchdog_message', array('event' => $log, 'link' => TRUE)),
         theme('username', array('account' => $log['user'])),
@@ -61,10 +68,34 @@ function redis_watchdog_overview() {
 }
 
 /**
+ * Callback to filter items when running log $log->getMultiple().
+ *
+ * @param array $entry
+ *   The entry to filter.
+ *
+ * @return bool
+ *   TRUE if this is shall be kept in the list.
+ */
+function redis_watchdog_overview_filter_callback($entry) {
+  if (empty($_SESSION['redis_watchdog_overview_filter'])) {
+    return TRUE;
+  }
+  foreach ($_SESSION['redis_watchdog_overview_filter'] as $property => $values) {
+    $values = is_array($values) ? $values : array($values);
+    if (isset($entry[$property]) && !empty($values) && !in_array($entry[$property], $values)) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+/**
  * Menu callback; displays details about a log message.
  */
 function redis_watchdog_event($id) {
-  $log = new RedisLog();
+  $log = RedisLog::getInstance();
+
+  drupal_add_css(drupal_get_path('module', 'redis_watchdog') . '/redis_watchdog.css');
 
   if ($result = $log->get($id)) {
     $severity = watchdog_severity_levels();
@@ -110,44 +141,13 @@ function redis_watchdog_event($id) {
 
     return theme('table', array(
       'rows' => $rows,
-      'attributes' => array('class' => array('redis_watchdog-event'))
+      'attributes' => array('class' => array('redis_watchdog-event')),
     ));
   }
   else {
     return '';
   }
 }
-
-/**
- * Build query for redis_watchdog administration filters based on session.
- */
-function redis_watchdog_build_filter_query() {
-  if (empty($_SESSION['redis_watchdog_overview_filter'])) {
-    return;
-  }
-
-  $filters = redis_watchdog_filters();
-
-  // Build query
-  $where = $args = array();
-  foreach ($_SESSION['redis_watchdog_overview_filter'] as $key => $filter) {
-    $filter_where = array();
-    foreach ($filter as $value) {
-      $filter_where[] = $filters[$key]['where'];
-      $args[] = $value;
-    }
-    if (!empty($filter_where)) {
-      $where[] = '(' . implode(' OR ', $filter_where) . ')';
-    }
-  }
-  $where = !empty($where) ? implode(' AND ', $where) : '';
-
-  return array(
-    'where' => $where,
-    'args' => $args,
-  );
-}
-
 
 /**
  * List redis_watchdog administration filters that can be applied.
@@ -187,17 +187,15 @@ function redis_watchdog_filters() {
  * @ingroup themeable
  */
 function theme_redis_watchdog_message($variables) {
-  $output = '';
   $event = $variables['event'];
-  // Check for required properties.
-  if (isset($event['message']) && isset($event['variables'])) {
-    $output = t($event['message'], $event['variables']);
+  $message = isset($event['message']) ? $event['message'] : '';
+  $vars = (isset($event['variables']) && is_array($event['variables'])) ? $event['variables'] : array();
+  $output = t($message, $vars);
 
-    if ($variables['link'] && isset($event['wid'])) {
-      // Truncate message to 56 chars.
-      $output = truncate_utf8(filter_xss($output, array()), 56, TRUE, TRUE);
-      $output = l($output, 'admin/reports/redislog/event/' . $event['wid'], array('html' => TRUE));
-    }
+  if (!empty($variables['link']) && isset($event['wid'])) {
+    // Truncate message to 56 chars.
+    $output = truncate_utf8(filter_xss($output, array()), 56, TRUE, TRUE);
+    $output = l($output, 'admin/reports/redislog/event/' . $event['wid'], array('html' => TRUE));
   }
 
   return $output;
@@ -243,7 +241,7 @@ function redis_watchdog_filter_form($form) {
   if (!empty($_SESSION['redis_watchdog_overview_filter'])) {
     $form['filters']['actions']['reset'] = array(
       '#type' => 'submit',
-      '#value' => t('Reset')
+      '#value' => t('Reset'),
     );
   }
 
@@ -273,6 +271,7 @@ function redis_watchdog_filter_form_submit($form, &$form_state) {
         }
       }
       break;
+
     case t('Reset'):
       $_SESSION['redis_watchdog_overview_filter'] = array();
       break;
@@ -314,3 +313,49 @@ function redis_watchdog_clear_log_submit() {
   drupal_set_message(t('Database log cleared.'));
 }
 
+/**
+ * Page callback: Shows the most frequent log messages of a given event type.
+ *
+ * Messages are not truncated on this page because events detailed herein do not
+ * have links to a detailed view.
+ *
+ * @param string $type
+ *   Type of database log events to display (e.g., 'search').
+ *
+ * @return array
+ *   A build array in the format expected by drupal_render().
+ *
+ * @see dblog_menu()
+ */
+function redis_watchdog_top($type) {
+
+  $header = array(
+    array('data' => t('Count'), 'field' => 'count', 'sort' => 'desc'),
+    array('data' => t('Message'), 'field' => 'message'),
+  );
+
+  // Use tablesort.
+  $order = tablesort_get_order($header);
+  $direction = tablesort_get_sort($header);
+
+  $log = RedisLog::getInstance();
+  $limit = 30;
+  $page = pager_default_initialize(count($log->countTopAll($type)), $limit);
+  $rows = array();
+  foreach ($log->getTop($type, $limit, $page * $limit, $order['sql'], $direction) as $log) {
+    $rows[] = array(
+      $log['count'],
+      theme('redis_watchdog_message', array('event' => $log, 'link' => TRUE)),
+    );
+  }
+
+  $build['redis_watchdog_top_table']  = array(
+    '#theme' => 'table',
+    '#header' => $header,
+    '#rows' => $rows,
+    '#empty' => t('No log messages available.'),
+  );
+  $build['redis_watchdog_top_pager'] = array('#theme' => 'pager');
+
+  return $build;
+}
