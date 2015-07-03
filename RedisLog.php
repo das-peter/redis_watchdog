@@ -63,24 +63,16 @@ class RedisLog {
   function log(array $log_entry) {
     // The user object may not exist in all conditions, so 0 is substituted if needed.
     $user_uid = isset($log_entry['user']->uid) ? $log_entry['user']->uid : 0;
-    $wid = $this->getId();
-    $message = array(
-      'wid' => $wid,
-      'uid' => $user_uid,
-      'type' => substr($log_entry['type'], 0, 64),
-      'message' => $log_entry['message'],
-      'variables' => serialize($log_entry['variables']),
-      'severity' => $log_entry['severity'],
-      'link' => substr($log_entry['link'], 0, 255),
-      'location' => $log_entry['request_uri'],
-      'referer' => $log_entry['referer'],
-      'hostname' => substr($log_entry['ip'], 0, 128),
-      'timestamp' => $log_entry['timestamp'],
-    );
-    $message = (object) $message;
-    $this->client->hSet($this->key, $wid, serialize($message));
-  }
 
+    $wid = $this->getId();
+
+    $log_entry['wid'] = $wid;
+    $log_entry['uid'] = $user_uid;
+    $log_entry['hostname'] = $log_entry['ip'];
+    $log_entry['location'] = $log_entry['request_uri'];
+
+    $this->client->hSet($this->key, $wid, serialize($log_entry));
+  }
 
   protected function getId() {
     return $this->client->hIncrBy($this->key, 'counter', 1);
@@ -100,21 +92,12 @@ class RedisLog {
   }
 
   public function getMultiple($limit = 50, $sort_field = 'wid', $sort_direction = 'DESC') {
-    $logs = array();
-    $types = array();
-    $max_wid = $this->client->hGet($this->key, 'counter');
-    $keys = range($max_wid, $max_wid - $limit);
-    $res = $this->client->hmGet($this->key, $keys);
-    foreach ($res as $entry) {
-      $entry = unserialize($entry);
-      $logs[] = $entry;
-      if (!in_array($entry->type, $types)) {
-        $types[] = $entry->type;
-      }
-    }
-    $this->types = $types;
+    $output = array_map(function($entity) {
+      return unserialize($entity);
+    }, $this->client->hVals($this->key));
 
-    $this->client->set($this->key . ':types', serialize($types));
-    return $logs;
+    //@TODO: Sort by $sort_field & $sort_direction.
+
+    return array_slice($output, 0, $limit);
   }
 }

@@ -10,14 +10,14 @@ function redis_watchdog_overview() {
   $filter = redis_watchdog_build_filter_query();
   $rows = array();
   $classes = array(
-    WATCHDOG_DEBUG     => 'redis_watchdog-debug',
-    WATCHDOG_INFO      => 'redis_watchdog-info',
-    WATCHDOG_NOTICE    => 'redis_watchdog-notice',
-    WATCHDOG_WARNING   => 'redis_watchdog-warning',
-    WATCHDOG_ERROR     => 'redis_watchdog-error',
-    WATCHDOG_CRITICAL  => 'redis_watchdog-critical',
-    WATCHDOG_ALERT     => 'redis_watchdog-alert',
-    WATCHDOG_EMERGENCY => 'redis_watchdog-emerg',
+    WATCHDOG_DEBUG     => 'dblog-debug',
+    WATCHDOG_INFO      => 'dblog-info',
+    WATCHDOG_NOTICE    => 'dblog-notice',
+    WATCHDOG_WARNING   => 'dblog-warning',
+    WATCHDOG_ERROR     => 'dblog-error',
+    WATCHDOG_CRITICAL  => 'dblog-critical',
+    WATCHDOG_ALERT     => 'dblog-alert',
+    WATCHDOG_EMERGENCY => 'dblog-emerg',
   );
 
   $header = array(
@@ -29,20 +29,19 @@ function redis_watchdog_overview() {
   );
 
   $log = new RedisLog();
-  $result = $log->getMultiple(50, 'wid', 'DESC');
-  foreach ($result as $log) {
-    $rows[] = array('data' =>
-      array(
-        // Cells
+  foreach ($log->getMultiple(50, 'wid', 'DESC') as $log) {
+    $rows[] = array(
+      'data' => array(
+        // Cells.
         array('class' => 'icon'),
-        t($log->type),
-        format_date($log->timestamp, 'short'),
+        t($log['type']),
+        format_date($log['timestamp'], 'short'),
         theme('redis_watchdog_message', array('event' => $log, 'link' => TRUE)),
-        theme('username', array('account' => $log)),
-        filter_xss($log->link),
+        theme('username', array('account' => $log['user'])),
+        filter_xss($log['link']),
       ),
-      // Attributes for tr
-      'class' => array(drupal_html_class('dblog-' . $log->type), $classes[$log->severity]),
+      // Attributes for tr.
+      'class' => array(drupal_html_class('dblog-' . $log['type']), $classes[$log['severity']]),
     );
   }
 
@@ -53,7 +52,7 @@ function redis_watchdog_overview() {
     '#theme' => 'table',
     '#header' => $header,
     '#rows' => $rows,
-    '#attributes' => array('id' => 'admin-redis_watchdog'),
+    '#attributes' => array('id' => 'admin-dblog'),
     '#empty' => t('No log messages available.'),
   );
   $build['redis_watchdog_pager'] = array('#theme' => 'pager');
@@ -65,54 +64,54 @@ function redis_watchdog_overview() {
  * Menu callback; displays details about a log message.
  */
 function redis_watchdog_event($id) {
-  $severity = watchdog_severity_levels();
   $log = new RedisLog();
-  $result = $log->get($id);
-  if ($log = $result) {
+
+  if ($result = $log->get($id)) {
+    $severity = watchdog_severity_levels();
+
     $rows = array(
       array(
         array('data' => t('Type'), 'header' => TRUE),
-        t($log->type),
+        t($result['type']),
       ),
       array(
         array('data' => t('Date'), 'header' => TRUE),
-        format_date($log->timestamp, 'long'),
+        format_date($result['timestamp'], 'long'),
       ),
       array(
         array('data' => t('User'), 'header' => TRUE),
-        theme('username', array('account' => $log)),
+        theme('username', array('account' => $result['user'])),
       ),
       array(
         array('data' => t('Location'), 'header' => TRUE),
-        l($log->location, $log->location),
+        l($result['location'], $result['location']),
       ),
       array(
         array('data' => t('Referrer'), 'header' => TRUE),
-        l($log->referer, $log->referer),
+        l($result['referer'], $result['referer']),
       ),
       array(
         array('data' => t('Message'), 'header' => TRUE),
-        theme('redis_watchdog_message', array('event' => $log)),
+        theme('redis_watchdog_message', array('event' => $result)),
       ),
       array(
         array('data' => t('Severity'), 'header' => TRUE),
-        $severity[$log->severity],
+        $severity[$result['severity']],
       ),
       array(
         array('data' => t('Hostname'), 'header' => TRUE),
-        check_plain($log->hostname),
+        check_plain($result['hostname']),
       ),
       array(
         array('data' => t('Operations'), 'header' => TRUE),
-        $log->link,
+        $result['link'],
       ),
     );
-    $build['redis_watchdog_table'] = array(
-      '#theme' => 'table',
-      '#rows' => $rows,
-      '#attributes' => array('class' => array('redis_watchdog-event')),
-    );
-    return $build;
+
+    return theme('table', array(
+      'rows' => $rows,
+      'attributes' => array('class' => array('redis_watchdog-event'))
+    ));
   }
   else {
     return '';
@@ -191,21 +190,16 @@ function theme_redis_watchdog_message($variables) {
   $output = '';
   $event = $variables['event'];
   // Check for required properties.
-  if (isset($event->message) && isset($event->variables)) {
-    // Messages without variables or user specified text.
-    if ($event->variables === 'N;') {
-      $output = $event->message;
-    }
-    // Message to translate with injected variables.
-    else {
-      $output = t($event->message, unserialize($event->variables));
-    }
-    if ($variables['link'] && isset($event->wid)) {
+  if (isset($event['message']) && isset($event['variables'])) {
+    $output = t($event['message'], $event['variables']);
+
+    if ($variables['link'] && isset($event['wid'])) {
       // Truncate message to 56 chars.
       $output = truncate_utf8(filter_xss($output, array()), 56, TRUE, TRUE);
-      $output = l($output, 'admin/reports/redislog/event/' . $event->wid, array('html' => TRUE));
+      $output = l($output, 'admin/reports/redislog/event/' . $event['wid'], array('html' => TRUE));
     }
   }
+
   return $output;
 }
 
