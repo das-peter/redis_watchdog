@@ -142,21 +142,30 @@ class RedisLog {
 
   public function getMultiple($limit = 50, $offset = 0, $sort_field = 'wid', $sort_direction = 'desc', $filter_callback = NULL) {
     $filter = function_exists($filter_callback);
+    // HACK - if we see that no filter is enabled we can use more performant
+    // handling.
+    if (empty($_SESSION['redis_watchdog_overview_filter'])) {
+      $filter = FALSE;
+    }
     $output = array();
 
     // Sort the keys in the list by the hash properties.
-    $keys = $this->client->sort($this->key . ':wid_list', array(
+    $sort_options = array(
       'sort' => strtolower($sort_direction),
       'by' => '*->' . $sort_field,
       'alpha' => TRUE,
-    ));
+    );
+    // With no filters we can limit directly.
+    if (!$filter) {
+      $sort_options['limit'] = array($offset, $limit);
+    }
+    $keys = $this->client->sort($this->key . ':wid_list', $sort_options);
     if ($keys) {
       $top = $limit + $offset;
       // Process the ordered items.
       foreach ($keys as $key) {
         $item = $this->client->hGetAll($key);
         if (!$filter || call_user_func($filter_callback, $item)) {
-          $this->inflateItem($item);
           $output[] = $item;
           // If we've already reached the maximum amount given paging and offset
           // we can stop further processing.
@@ -168,7 +177,14 @@ class RedisLog {
     }
 
     // Enforce paging.
-    $output = array_slice($output, $offset, $limit);
+    if ($filter) {
+      $output = array_slice($output, $offset, $limit);
+    }
+
+    // Now inflate the items - this saves a ton of time to do this just here.
+    foreach ($output as &$item) {
+      $this->inflateItem($item);
+    }
 
     return $output;
   }
