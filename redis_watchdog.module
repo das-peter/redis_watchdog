@@ -28,12 +28,12 @@ function redis_watchdog_menu() {
  * Implements hook_watchdog().
  */
 function redis_watchdog_watchdog(array $entry) {
-  $q = new Redislog();
+  $q = Redislog::getInstance();
   $q->log($entry);
 }
 
 function _redis_watchdog_get_message_types() {
-  $log = new RedisLog();
+  $log = Redislog::getInstance();
   return $log->getMessageTypes();
 }
 
