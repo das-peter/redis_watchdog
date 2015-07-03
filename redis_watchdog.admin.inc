@@ -308,6 +308,9 @@ function redis_watchdog_clear_log_form($form) {
  */
 function redis_watchdog_clear_log_submit() {
   $_SESSION['redis_watchdog_overview_filter'] = array();
-  db_delete('watchdog')->execute();
+  $log = RedisLog::getInstance();
+  $log->clear();
+
   drupal_set_message(t('Database log cleared.'));
 }
+

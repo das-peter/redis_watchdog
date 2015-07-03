@@ -100,4 +100,10 @@ class RedisLog {
 
     return array_slice($output, 0, $limit);
   }
+
+  public function clear() {
+    $this->client->delete($this->key . ':types');
+    $this->client->delete($this->key);
+  }
 }
+
