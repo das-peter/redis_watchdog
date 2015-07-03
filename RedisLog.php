@@ -174,24 +174,9 @@ class RedisLog {
   }
 
   public function getTop($type, $limit = 30, $offset = 0, $sort_field = 'count', $sort_direction = 'DESC') {
-    $groups = array();
-    // Fetch all known entries and group them by message and variables.
-    $off = 0;
-    $step = 1000;
-    while (($keys = $this->client->lrange($this->key . ':type_list:' . $type, $off, $step))) {
-      $off += $step;
-      foreach ($keys as $key) {
-        $item = $this->client->hGetAll($key);
-        $group = $item['message'] . ':' . $item['variables'];
-        if (!isset($groups[$group])) {
-          $this->inflateItem($item);
-          $groups[$group] = $item;
-          $groups[$group]['count'] = 0;
-        }
-        $groups[$group]['count']++;
-      }
-    }
-
+    // Fills $this->topLists[$type];
+    $this->countTopAll($type);
+    $groups = $this->topLists[$type];
     $output = array();
     foreach ($groups as $group => $item) {
       $sort_key = $group;
@@ -213,7 +198,29 @@ class RedisLog {
   }
 
   public function countTopAll($type) {
-     return $this->client->llen($this->key . ':type_list:' . $type);
+    if (!isset($this->topLists[$type])) {
+      $groups = array();
+      // Fetch all known entries and group them by message and variables.
+      $off = 0;
+      $step = 1000;
+      $pos = $step;
+      while (($keys = $this->client->lrange($this->key . ':type_list:' . $type, $off, $pos))) {
+        $off += $step;
+        $pos += $step;
+        foreach ($keys as $key) {
+          $item = $this->client->hGetAll($key);
+          $group = $item['message'] . ':' . $item['variables'];
+          if (!isset($groups[$group])) {
+            $this->inflateItem($item);
+            $groups[$group] = $item;
+            $groups[$group]['count'] = 0;
+          }
+          $groups[$group]['count']++;
+        }
+      }
+      $this->topLists[$type] = $groups;
+    }
+     return count($this->topLists[$type]);
   }
 
   protected function deflateItem(&$item) {
