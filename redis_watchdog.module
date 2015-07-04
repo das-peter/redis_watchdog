@@ -109,7 +109,7 @@ function redis_watchdog_theme() {
 /**
  * Creates random log entries.
  */
-function redis_watchdog_create_log_entries($type = NULL, $message = NULL, $variables = array(), $severity = NULL) {
+function redis_watchdog_create_random_log_entry($type = NULL, $message = NULL, $variables = array(), $severity = NULL) {
   static $types, $users;
   global $base_root;
 
@@ -170,5 +170,33 @@ function redis_watchdog_create_log_entries($type = NULL, $message = NULL, $varia
     'timestamp'   => strtotime('- ' . rand(0, 300) . ' minutes'),
   );
 
-  redis_watchdog_watchdog($log_entry);
+  return $log_entry;
+}
+
+function redis_watchdog_create_log_entries($type = NULL, $message = NULL, $variables = array(), $severity = NULL) {
+  redis_watchdog_watchdog(redis_watchdog_create_random_log_entry($type, $message, $variables, $severity));
+}
+
+function redis_watchdog_dblog_comparison ($count = 10000) {
+  $timers = array_fill_keys(module_implements('watchdog'), 0);
+  // Preflight check, ensure the hook is callable.
+  foreach ($timers as $module => $time) {
+    if (!function_exists($module . '_watchdog')) {
+      unset($timers[$module]);
+    }
+  }
+
+  for ($i = 0; $i < $count; $i++) {
+    $log_entry = redis_watchdog_create_random_log_entry();
+    redis_watchdog_watchdog($log_entry);
+    foreach ($timers as $module => &$time) {
+      $start = microtime(TRUE);
+      call_user_func($module . '_watchdog', $log_entry);
+      $time += microtime(TRUE) - $start;
+    }
+  }
+
+  foreach ($timers as $module => $time) {
+    echo $module . ' :' . $time . ' seconds <br>';
+  }
 }
