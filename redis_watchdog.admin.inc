@@ -288,7 +288,7 @@ function redis_watchdog_clear_log_submit() {
   $log = RedisLog::getInstance();
   $log->clear();
 
-  drupal_set_message(t('Database log cleared.'));
+  drupal_set_message(t('Redis log cleared.'));
 }
 
 /**
