@@ -177,7 +177,7 @@ function redis_watchdog_create_log_entries($type = NULL, $message = NULL, $varia
   redis_watchdog_watchdog(redis_watchdog_create_random_log_entry($type, $message, $variables, $severity));
 }
 
-function redis_watchdog_dblog_comparison ($count = 10000, $type = NULL, $message = NULL, $variables = array(), $severity = NULL) {
+function redis_watchdog_dblog_comparison ($count = 1000, $type = NULL, $message = NULL, $variables = array(), $severity = NULL) {
   $timers = array_fill_keys(module_implements('watchdog'), 0);
   // Preflight check, ensure the hook is callable.
   foreach ($timers as $module => $time) {
@@ -197,6 +197,6 @@ function redis_watchdog_dblog_comparison ($count = 10000, $type = NULL, $message
   }
 
   foreach ($timers as $module => $time) {
-    echo $module . ' :' . $time . ' seconds <br>';
+    echo $module . ': ' . $time . ' seconds <br>';
   }
 }

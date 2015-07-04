@@ -3,6 +3,16 @@
 This module provides a logging backend for the Redis key-value store, as well as 
 a dblog-like user interface to view watchdog entries.
 
+## Why
+
+The problem with the standard dblog module is that logging:
+
+ * Is slower - below a test run to generate 100'000 log entries:
+    * dblog: 83.3512 seconds 
+    * redis_watchdog: 44.8564 seconds 
+ * It doesn't block the DB! If you've multiple requests in paralell the Redis 
+Watchdog wont lock your db.
+
 # Requirements
 
 **Requires** the [PhpRedis](https://github.com/phpredis/phpredis) php extension.
