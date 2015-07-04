@@ -1,4 +1,34 @@
-# Configuration options
+# Redis Watchdog
+
+This module provides a logging backend for the Redis key-value store, as well as 
+a dblog-like user interface to view watchdog entries.
+
+# Requirements
+
+**Requires** the [PhpRedis](https://github.com/phpredis/phpredis) php extension.
+
+# Installation
+
+**It is strongly recommended you run redis_watchdog on a dedicated redis instance
+with special persistency / memory limit settings.**
+
+## Create dedicated redis instance
+
+1. Create a new config file `/etc/redis/redis-redis_watchdog.conf` (copied from `/etc/redis/redis.conf`) and change these fields in the new config
+    * pidfile
+    * port
+    * logfile
+    * dir (for the default db)
+2. Create a new file `/etc/init.d/redis-server-redis_watchdog` (copied from the file `/etc/init.d/redis-server`) and change these fields in the new file
+    * name
+    * pidfile (same as in the config file in step 1)
+    * deamon_args (the path to the config file in step 1).
+3. Create the needed directory `mkdir /var/lib/redis-redis_watchdog`
+4. Set the proper rights `chown redis:redis /var/lib/redis-redis_watchdog`
+5. Make the new file executable: `chmod +x /etc/init.d/redis-server-redis_watchdog`
+6. Register the new deamon: `update-rc.d redis-server-redis_watchdog defaults`
+
+## Redis Watchdog configuration options
 
 * Redis host: `$conf['redis_watchdog_host']`
 * Redis port: `$conf['redis_watchdog_port']`
@@ -9,9 +39,6 @@
 
 If those settings aren't given the configuration falls back to use the 
 respective `redis_client_` configuration options. See the readme of the redis
-module for further information.
+module for further information.  
 If no configuration options are given the defaults from the class `Redis_Client`
 will be used.
-
-**It is strongly recommended you run redis_watchdog on a dedicated redis instance
-with special persistency / memory limit settings.**
