@@ -36,7 +36,7 @@ function redis_watchdog_overview() {
   $log = RedisLog::getInstance();
   $limit = 50;
   $page = pager_default_initialize($log->count(), $limit);
-  foreach ($log->getMultiple($limit, $page * $limit, $order['sql'], $direction, 'redis_watchdog_overview_filter_callback') as $log) {
+  foreach ($log->getMultiple($limit, $page * $limit, $order['sql'], $direction) as $log) {
     $rows[] = array(
       'data' => array(
         // Cells.
@@ -65,28 +65,6 @@ function redis_watchdog_overview() {
   $build['redis_watchdog_pager'] = array('#theme' => 'pager');
 
   return $build;
-}
-
-/**
- * Callback to filter items when running log $log->getMultiple().
- *
- * @param array $entry
- *   The entry to filter.
- *
- * @return bool
- *   TRUE if this is shall be kept in the list.
- */
-function redis_watchdog_overview_filter_callback($entry) {
-  if (empty($_SESSION['redis_watchdog_overview_filter'])) {
-    return TRUE;
-  }
-  foreach ($_SESSION['redis_watchdog_overview_filter'] as $property => $values) {
-    $values = is_array($values) ? $values : array($values);
-    if (isset($entry[$property]) && !empty($values) && !in_array($entry[$property], $values)) {
-      return FALSE;
-    }
-  }
-  return TRUE;
 }
 
 /**
