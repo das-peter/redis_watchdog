@@ -88,24 +88,20 @@ class RedisLog {
     $this->client->hMSet($key, $log_entry);
     $this->client->lPush($this->key . ':wid_list', $key);
 
-    // Ensure type is collected.
-    if (!($types = $this->client->hgetall($this->key . ':types'))) {
-      $types = array();
-    }
-    $types[$log_entry['type']] = $log_entry['type'];
+    // Log type.
     $this->client->hSet($this->key . ':types', $log_entry['type'], $log_entry['type']);
     // Add type to type list.
     $this->client->lPush($this->key . ':type_list:' . $log_entry['type'], $key);
-    $this->types = $types;
   }
 
   protected function getId() {
     $id = $this->client->incrby($this->key . ':counter', 1);
-    $count = $this->count();
-    if ($id < $count) {
-      $this->client->set($this->key . ':counter', $count);
-      $id = $this->client->incrby($this->key . ':counter', 1);
-    }
+    // @TODO Shall we do this consistency check? How about random keys?
+//    $count = $this->count();
+//    if ($id < $count) {
+//      $this->client->set($this->key . ':counter', $count);
+//      $id = $this->client->incrby($this->key . ':counter', 1);
+//    }
     return $id;
   }
 
