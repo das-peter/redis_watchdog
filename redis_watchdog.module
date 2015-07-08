@@ -82,6 +82,8 @@ function redis_watchdog_menu() {
 
 /**
  * Implements hook_watchdog().
+ *
+ * @see hook_watchdog()
  */
 function redis_watchdog_watchdog(array $entry) {
   $q = Redislog::getInstance();

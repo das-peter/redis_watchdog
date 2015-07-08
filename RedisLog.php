@@ -7,7 +7,7 @@
 /**
  * Class RedisLog.
  */
-class RedisLog {
+class RedisLog implements Countable {
   /**
    * @var Redis_Client
    */
@@ -77,7 +77,8 @@ class RedisLog {
    * Implements hook_watchdog().
    */
   public function log(array $log_entry) {
-    $wid = $this->getId();
+    // We use a random id which doesn't rely solely on microseconds or similar.
+    $wid = uniqid();
     $log_entry['wid'] = $wid;
     $log_entry['hostname'] = $log_entry['ip'];
     $log_entry['location'] = $log_entry['request_uri'];
@@ -92,17 +93,6 @@ class RedisLog {
     $this->client->hSet($this->key . ':types', $log_entry['type'], $log_entry['type']);
     // Add type to type list.
     $this->client->lPush($this->key . ':type_list:' . $log_entry['type'], $key);
-  }
-
-  protected function getId() {
-    $id = $this->client->incrby($this->key . ':counter', 1);
-    // @TODO Shall we do this consistency check? How about random keys?
-//    $count = $this->count();
-//    if ($id < $count) {
-//      $this->client->set($this->key . ':counter', $count);
-//      $id = $this->client->incrby($this->key . ':counter', 1);
-//    }
-    return $id;
   }
 
   public function getMessageTypes($reset = FALSE) {
@@ -129,13 +119,39 @@ class RedisLog {
     return $this->types;
   }
 
+  /**
+   * Return a single log entry.
+   *
+   * @param string $wid
+   *   The id of the log entry.
+   *
+   * @return bool|array
+   *   Array with the log entry. FALSE if the log entry wasn't found.
+   */
   public function get($wid) {
     $result = $this->client->hGetAll($this->key . ':wid:' . $wid);
     $result['variables'] = unserialize($result['variables']);
     return $result ? $result : FALSE;
   }
 
-  public function getMultiple($limit = 50, $offset = 0, $sort_field = 'wid', $sort_direction = 'desc') {
+  /**
+   * Returns a list of watchdog entries.
+   *
+   * Time complexity: O(N) if filter are set O(N log N)
+   *
+   * @param int $limit
+   *   Number of items in the top list.
+   * @param int $offset
+   *   Offset to start from.
+   * @param string $sort_field
+   *   Field to sort by - usually timestamp.
+   * @param string $sort_direction
+   *   The sort direction. ASC / DESC.
+   *
+   * @return array
+   *   List of watchdog entries.
+   */
+  public function getMultiple($limit = 50, $offset = 0, $sort_field = 'timestamp', $sort_direction = 'desc') {
     $filter = !empty($_SESSION['redis_watchdog_overview_filter']);
     $output = array();
 
@@ -181,6 +197,14 @@ class RedisLog {
 
   /**
    * Checks if an log entry matches the filter criteria in the session.
+   *
+   * Time complexity: O(1)
+   *
+   * @param string $key
+   *   Key of the log entry to check.
+   *
+   * @return bool
+   *   TRUE if the entry matches.
    */
   protected function matchFilter($key) {
     foreach ($_SESSION['redis_watchdog_overview_filter'] as $property => $values) {
@@ -192,6 +216,23 @@ class RedisLog {
     return TRUE;
   }
 
+  /**
+   * Returns a list of the most occuring log items of a type.
+   *
+   * @param string $type
+   *   The log item type.
+   * @param int $limit
+   *   Number of items in the top list.
+   * @param int $offset
+   *   Offset to start from.
+   * @param string $sort_field
+   *   Field to sort by - usually count.
+   * @param string $sort_direction
+   *   The sort direction. ASC / DESC.
+   *
+   * @return array
+   *   List with the groupend log entries.
+   */
   public function getTop($type, $limit = 30, $offset = 0, $sort_field = 'count', $sort_direction = 'DESC') {
     // Fills $this->topLists[$type];
     $this->countTopAll($type);
@@ -216,6 +257,18 @@ class RedisLog {
     return $output;
   }
 
+  /**
+   * Count the number of entries of a specific type.
+   *
+   * Stores the found watchdog entries in the class variable self::topLists
+   * that way this evaluation can be re-used by self::getTop()
+   *
+   * @param string $type
+   *   The type to count.
+   *
+   * @return int
+   *   Number of entries of the given type.
+   */
   public function countTopAll($type) {
     if (!isset($this->topLists[$type])) {
       $groups = array();
@@ -242,6 +295,14 @@ class RedisLog {
     return count($this->topLists[$type]);
   }
 
+  /**
+   * Removes storage heavy data and takes care of serialize.
+   *
+   * Removes especially the user object which can be restored later on.
+   *
+   * @param object $item
+   *   The log entry to deflate.
+   */
   protected function deflateItem(&$item) {
     // The user object may not exist in all conditions, so 0 is substituted if
     // needed.
@@ -251,35 +312,57 @@ class RedisLog {
     $item['variables'] = serialize($item['variables']);
   }
 
+  /**
+   * Restores storage heavy data and takes care of unserialize.
+   *
+   * Restores especially the user object.
+   *
+   * @param object $item
+   *   The log entry to inflate.
+   */
   protected function inflateItem(&$item) {
     // Restore user object.
+    // @TODO What do if the user was removed can't be load?
     $item['user'] = user_load($item['uid']);
     // Restore variables.
     $item['variables'] = unserialize($item['variables']);
   }
 
+  /**
+   * Returns the number if watchdog entries.
+   *
+   * Time complexity: O(1) except if count = 0 then O(N) - which still is fast
+   * if N = 0.
+   *
+   * @return int
+   *   Number of watchdog entries.
+   */
   public function count() {
-    // If the counter is missing - restore it.
-    if (!$this->client->exists($this->key . ':counter')) {
-      // Try to fetch it from the key list, we don't trust 0 and rebuild the
-      // list bases on a entry scan.
-      if (!($count = $this->client->lLen($this->key . ':wid_list'))) {
-        $this->rebuildKeyList();
-        $count = $this->client->lLen($this->key . ':wid_list');
-      }
-      $this->client->set($this->key . ':counter', $count);
+    // We use the list to count. This is still very fast since:
+    // Time complexity: O(1)
+    // However, we don't trust 0 items, so check if there's really no items.
+    if (!($count = $this->client->lLen($this->key . ':wid_list'))) {
+      $this->rebuildKeyList();
+      $count = $this->client->lLen($this->key . ':wid_list');
     }
-    return $this->client->get($this->key . ':counter');
+    return $count;
   }
 
+  /**
+   * Rebuild the key list of all watchdog entries.
+   *
+   * Time complexity: O(N)
+   */
   public function rebuildKeyList() {
     $unique = array();
     // Delete list and rebuild it.
     $this->client->del($this->key . ':wid_list');
     $it = NULL;
+    // Time complexity: O(N).
     while (($items = $this->client->scan($it, $this->key . ':wid:*', 1000)) !== FALSE) {
       foreach ($items as $key) {
         if (!isset($unique[$key])) {
+          // Time complexity: O(1).
           $this->client->lPush($this->key . ':wid_list', $key);
           $unique[$key] = $key;
         }
@@ -287,6 +370,11 @@ class RedisLog {
     }
   }
 
+  /**
+   * Clears the log.
+   *
+   * Time complexity: O(N)
+   */
   public function clear() {
     // Ensure really nothing is left.
     $it = NULL;
