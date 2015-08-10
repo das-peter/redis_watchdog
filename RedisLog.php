@@ -328,6 +328,14 @@ class RedisLog implements Countable {
     // Don't save the whole user object but the user name.
     $item['user'] = !empty($item['user']->name) ? $item['user']->name : variable_get('anonymous', t('Anonymous'));
     $item['variables'] = serialize($item['variables']);
+
+    // Since some redis libraries have issues with data typing ensure we don't
+    // have NULL values.
+    array_walk($item, function(&$val) {
+      if (!is_scalar($val) || is_null($val)) {
+        $val = (string) $val;
+      }
+    });
   }
 
   /**
