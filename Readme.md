@@ -40,11 +40,22 @@ with special persistency / memory limit settings.**
 
 ## Redis Watchdog configuration options
 
+## Redis 2.x
+
 * Redis host: `$conf['redis_watchdog_host']`
 * Redis port: `$conf['redis_watchdog_port']`
 * Redis database: `$conf['redis_watchdog_base']`
 * Redis password: `$conf['redis_watchdog_password']`
 * Redis host: `$conf['redis_watchdog_socket']`
+* Site key prefix: `$conf['redis_watchdog_prefix']` - fallback `$conf['cache_prefix']`
+
+## Redis 3.x
+
+* Redis host: `$conf['redis_servers']['watchdog']['host']`
+* Redis port: `$conf['redis_servers']['watchdog']['port']`
+* Redis database: `$conf['redis_servers']['watchdog']['base']`
+* Redis password: `$conf['redis_servers']['watchdog']['password']`
+* Redis host: `$conf['redis_servers']['watchdog']['socket']`
 * Site key prefix: `$conf['redis_watchdog_prefix']` - fallback `$conf['cache_prefix']`
 
 If those settings aren't given the configuration falls back to use the 
