@@ -34,6 +34,9 @@ function redis_watchdog_overview() {
   $direction = tablesort_get_sort($header);
 
   $log = RedisLog::getInstance();
+  if (!$log->isReady()) {
+    return t('Logger is not ready. Please check the configuration. %exception', array('%exception' => (string) $log->getException()));
+  }
   $limit = 50;
   $page = pager_default_initialize($log->count(), $limit);
   foreach ($log->getMultiple($limit, $page * $limit, $order['sql'], $direction) as $log) {

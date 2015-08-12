@@ -87,12 +87,17 @@ function redis_watchdog_menu() {
  */
 function redis_watchdog_watchdog(array $entry) {
   $q = Redislog::getInstance();
-  $q->log($entry);
+  if ($q->isReady()) {
+    $q->log($entry);
+  }
 }
 
 function _redis_watchdog_get_message_types() {
   $log = Redislog::getInstance();
-  return $log->getMessageTypes();
+  if ($log->isReady()) {
+    return $log->getMessageTypes();
+  }
+  return array();
 }
 
 /**

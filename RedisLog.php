@@ -15,6 +15,8 @@ class RedisLog implements Countable {
   protected $key;
   protected $types = array();
 
+  protected $exception;
+
   /**
    * Keeps the single instance of this class.
    *
@@ -37,58 +39,79 @@ class RedisLog implements Countable {
   protected function __construct() {
     global $conf;
 
-    switch (TRUE) {
-      case class_exists('Redis_Client_Manager'):
-        $redis_client_settings_class = 'Redis_Client_Manager';
-        break;
+    try {
+      switch (TRUE) {
+        case class_exists('Redis_Client_Manager'):
+          $redis_client_settings_class = 'Redis_Client_Manager';
+          break;
 
-      case class_exists('Redis_Client'):
-        $redis_client_settings_class = 'Redis_Client';
-        break;
+        case class_exists('Redis_Client'):
+          $redis_client_settings_class = 'Redis_Client';
+          break;
 
-      default:
-        throw new Exception('No compatible redis client class found.');
-    }
-
-    // Build the appropriate config.
-    if (empty($conf['redis_watchdog_host'])) {
-      $conf['redis_watchdog_host'] = isset($conf['redis_client_host']) ? $conf['redis_client_host'] : $redis_client_settings_class::REDIS_DEFAULT_HOST;
-    }
-    if (empty($conf['redis_watchdog_port'])) {
-      $conf['redis_watchdog_port'] = isset($conf['redis_client_port']) ? $conf['redis_client_port'] : $redis_client_settings_class::REDIS_DEFAULT_PORT;
-    }
-    if (!isset($conf['redis_watchdog_base'])) {
-      $conf['redis_watchdog_base'] = isset($conf['redis_client_base']) ? $conf['redis_client_base'] : $redis_client_settings_class::REDIS_DEFAULT_BASE;
-    }
-    if (!isset($conf['redis_watchdog_password'])) {
-      $conf['redis_watchdog_password'] = isset($conf['redis_client_password']) ? $conf['redis_client_password'] : $redis_client_settings_class::REDIS_DEFAULT_PASSWORD;
-    }
-    if (!isset($conf['redis_watchdog_socket'])) {
-      $conf['redis_watchdog_socket'] = isset($conf['redis_client_socket']) ? $conf['redis_client_socket'] : $redis_client_settings_class::REDIS_DEFAULT_SOCKET;
-    }
-
-    if ($redis_client_settings_class == 'Redis_Client') {
-      $this->client = Redis_Client::getClientInterface()->getClient(
-        $conf['redis_watchdog_host'],
-        $conf['redis_watchdog_port'],
-        $conf['redis_watchdog_base'],
-        $conf['redis_watchdog_password'],
-        $conf['redis_watchdog_socket']
-      );
-    }
-    else {
-      $this->client = Redis_Client::getManager()->getClient('watchdog');
-    }
-    $this->client->setOption(Redis::OPT_SCAN, Redis::SCAN_RETRY);
-
-    // See if we can fallback to a site-prefix.
-    if (!isset($conf['redis_watchdog_prefix'])) {
-      $conf['redis_watchdog_prefix'] = '';
-      if (isset($conf['cache_prefix'])) {
-        $conf['redis_watchdog_prefix'] = $conf['cache_prefix'];
+        default:
+          throw new Exception('No compatible redis client class found.');
       }
+
+      // Build the appropriate config.
+      if (empty($conf['redis_watchdog_host'])) {
+        $conf['redis_watchdog_host'] = isset($conf['redis_client_host']) ? $conf['redis_client_host'] : $redis_client_settings_class::REDIS_DEFAULT_HOST;
+      }
+      if (empty($conf['redis_watchdog_port'])) {
+        $conf['redis_watchdog_port'] = isset($conf['redis_client_port']) ? $conf['redis_client_port'] : $redis_client_settings_class::REDIS_DEFAULT_PORT;
+      }
+      if (!isset($conf['redis_watchdog_base'])) {
+        $conf['redis_watchdog_base'] = isset($conf['redis_client_base']) ? $conf['redis_client_base'] : $redis_client_settings_class::REDIS_DEFAULT_BASE;
+      }
+      if (!isset($conf['redis_watchdog_password'])) {
+        $conf['redis_watchdog_password'] = isset($conf['redis_client_password']) ? $conf['redis_client_password'] : $redis_client_settings_class::REDIS_DEFAULT_PASSWORD;
+      }
+      if (!isset($conf['redis_watchdog_socket'])) {
+        $conf['redis_watchdog_socket'] = isset($conf['redis_client_socket']) ? $conf['redis_client_socket'] : $redis_client_settings_class::REDIS_DEFAULT_SOCKET;
+      }
+
+      if ($redis_client_settings_class == 'Redis_Client') {
+        $this->client = Redis_Client::getClientInterface()->getClient(
+          $conf['redis_watchdog_host'],
+          $conf['redis_watchdog_port'],
+          $conf['redis_watchdog_base'],
+          $conf['redis_watchdog_password'],
+          $conf['redis_watchdog_socket']
+        );
+      }
+      else {
+        $this->client = Redis_Client::getManager()->getClient('watchdog');
+      }
+      $this->client->setOption(Redis::OPT_SCAN, Redis::SCAN_RETRY);
+
+      // See if we can fallback to a site-prefix.
+      if (!isset($conf['redis_watchdog_prefix'])) {
+        $conf['redis_watchdog_prefix'] = '';
+        if (isset($conf['cache_prefix'])) {
+          $conf['redis_watchdog_prefix'] = $conf['cache_prefix'];
+        }
+      }
+      $this->key = $conf['redis_watchdog_prefix'] . 'drupal:watchdog';
     }
-    $this->key = $conf['redis_watchdog_prefix'] . 'drupal:watchdog';
+    catch (Exception $e) {
+      $this->exception = $e;
+      // Try to log it into the php error log. But don't die!
+      error_log((string) $e);
+    }
+  }
+
+  /**
+   * Checks if the logger can be used.
+   *
+   * @return bool
+   *   TRUE if logging is possible.
+   */
+  public function isReady() {
+    return !empty($this->client);
+  }
+
+  public function getException() {
+    return $this->exception;
   }
 
   /**
