@@ -207,6 +207,24 @@ class RedisLog implements Countable {
       $sort_options['limit'] = array($offset, $limit);
     }
     $keys = $this->client->sort($this->key . ':wid_list', $sort_options);
+    // Sometimes sort seems to fail, fallback to php code.
+    if (empty($keys) && $this->count()) {
+      $it = NULL;
+      $keys = array();
+      // Time complexity: O(N).
+      while (($items = $this->client->scan($it, $this->key . ':wid:*', 1000)) !== FALSE) {
+        foreach ($items as $key) {
+          if (!isset($keys[$key])) {
+            $keys[$key] = $key;
+          }
+          if (!$filter && count($keys) > ($offset + $limit)) {
+            break;
+          }
+        }
+      }
+      sort($keys);
+      $keys = array_slice($keys, $offset, $limit);
+    }
     if ($keys) {
       $top = $limit + $offset;
       // Process the ordered items.
