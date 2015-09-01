@@ -223,7 +223,6 @@ class RedisLog implements Countable {
         }
       }
       sort($keys);
-      $keys = array_slice($keys, $offset, $limit);
     }
     if ($keys) {
       $top = $limit + $offset;
