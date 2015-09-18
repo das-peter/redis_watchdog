@@ -19,6 +19,7 @@ function redis_watchdog_overview() {
     WATCHDOG_EMERGENCY => 'dblog-emerg',
   );
 
+  drupal_add_css(drupal_get_path('module', 'dblog') . '/dblog.css');
   drupal_add_css(drupal_get_path('module', 'redis_watchdog') . '/redis_watchdog.css');
 
   $header = array(
@@ -76,6 +77,7 @@ function redis_watchdog_overview() {
 function redis_watchdog_event($id) {
   $log = RedisLog::getInstance();
 
+  drupal_add_css(drupal_get_path('module', 'dblog') . '/dblog.css');
   drupal_add_css(drupal_get_path('module', 'redis_watchdog') . '/redis_watchdog.css');
 
   if ($result = $log->get($id)) {
