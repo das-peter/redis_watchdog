@@ -122,6 +122,22 @@ function redis_watchdog_event($id) {
       ),
     );
 
+    // Add stack / backtrace if available.
+    $backtrace_formatter = (is_callable('format_stacktrace')) ? 'format_stacktrace' : 'format_backtrace';
+    if ((!empty($result['variables']['!stacktrace'])) && is_callable($backtrace_formatter)) {
+      $rows[] = array(
+        array('data' => t('Stacktrace'), 'header' => TRUE),
+        $backtrace_formatter($result['variables']['!stacktrace']),
+      );
+    }
+    if ((!empty($result['variables']['!backtrace'])) && is_callable($backtrace_formatter)) {
+      $rows[] = array(
+        array('data' => t('Backtrace'), 'header' => TRUE),
+        $backtrace_formatter($result['variables']['!backtrace']),
+      );
+    }
+
+
     return theme('table', array(
       'rows' => $rows,
       'attributes' => array('class' => array('redis_watchdog-event')),
@@ -173,6 +189,9 @@ function theme_redis_watchdog_message($variables) {
   $event = $variables['event'];
   $message = isset($event['message']) ? $event['message'] : '';
   $vars = (isset($event['variables']) && is_array($event['variables'])) ? $event['variables'] : array();
+  // Remove array variables.
+  unset($vars['!backtrace'], $vars['!stacktrace']);
+
   $output = t($message, $vars);
 
   if (!empty($variables['link']) && isset($event['wid'])) {
