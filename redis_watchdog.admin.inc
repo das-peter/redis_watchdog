@@ -83,6 +83,8 @@ function redis_watchdog_event($id) {
   if ($result = $log->get($id)) {
     $severity = watchdog_severity_levels();
 
+    redis_watchdog_process_traces($result);
+
     $rows = array(
       array(
         array('data' => t('Type'), 'header' => TRUE),
@@ -123,17 +125,16 @@ function redis_watchdog_event($id) {
     );
 
     // Add stack / backtrace if available.
-    $backtrace_formatter = (is_callable('format_stacktrace')) ? 'format_stacktrace' : 'format_backtrace';
-    if ((!empty($result['variables']['!stacktrace'])) && is_callable($backtrace_formatter)) {
+    if ((!empty($result['variables']['!stacktrace']))) {
       $rows[] = array(
         array('data' => t('Stacktrace'), 'header' => TRUE),
-        $backtrace_formatter($result['variables']['!stacktrace']),
+        $result['variables']['!stacktrace'],
       );
     }
-    if ((!empty($result['variables']['!backtrace'])) && is_callable($backtrace_formatter)) {
+    if ((!empty($result['variables']['!backtrace']))) {
       $rows[] = array(
         array('data' => t('Backtrace'), 'header' => TRUE),
-        $backtrace_formatter($result['variables']['!backtrace']),
+        $result['variables']['!backtrace'],
       );
     }
 
@@ -145,6 +146,26 @@ function redis_watchdog_event($id) {
   }
   else {
     return '';
+  }
+}
+
+/**
+ * Ensures the stack / backtraces introduced by #1158322 are printable.
+ *
+ * @link https://www.drupal.org/node/1158322
+ */
+function redis_watchdog_process_traces(&$log_entry) {
+  // Add stack / backtrace if available.
+  $backtrace_formatter = (is_callable('format_stacktrace')) ? 'format_stacktrace' : 'format_backtrace';
+  foreach (array('!stacktrace', '!backtrace') as $type) {
+    if (isset($log_entry['variables'][$type]) && is_array($log_entry['variables'][$type])) {
+      if (is_callable($backtrace_formatter)) {
+        $log_entry['variables'][$type] = $backtrace_formatter($log_entry['variables'][$type]);
+      }
+      else {
+        $log_entry['variables'][$type] = print_r($log_entry['variables'][$type], TRUE);
+      }
+    }
   }
 }
 
@@ -189,8 +210,6 @@ function theme_redis_watchdog_message($variables) {
   $event = $variables['event'];
   $message = isset($event['message']) ? $event['message'] : '';
   $vars = (isset($event['variables']) && is_array($event['variables'])) ? $event['variables'] : array();
-  // Remove array variables.
-  unset($vars['!backtrace'], $vars['!stacktrace']);
 
   $output = t($message, $vars);
 
