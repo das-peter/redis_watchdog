@@ -171,7 +171,9 @@ class RedisLog implements Countable {
    */
   public function get($wid) {
     $result = $this->client->hGetAll($this->key . ':wid:' . $wid);
-    $result['variables'] = unserialize($result['variables']);
+    if (isset($result['variables'])) {
+      $result['variables'] = unserialize($result['variables']);
+    }
     return $result ? $result : FALSE;
   }
 
