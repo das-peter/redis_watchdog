@@ -209,7 +209,8 @@ class RedisLog implements Countable {
       $sort_options['limit'] = array($offset, $limit);
     }
     $keys = $this->client->sort($this->key . ':wid_list', $sort_options);
-    // Sometimes sort seems to fail, fallback to php code.
+    // Sometimes sort seems to fail and returns an empty value, fallback to php
+    // code to fetch and sort.
     if (empty($keys) && $this->count()) {
       $it = NULL;
       $keys = array();
@@ -226,26 +227,45 @@ class RedisLog implements Countable {
       }
       sort($keys);
     }
+    $rebuild_keys = FALSE;
     if ($keys) {
       $top = $limit + $offset;
       // Process the ordered items.
       foreach ($keys as $key) {
         if (!$filter || $this->matchFilter($key)) {
-          $item = $this->client->hGetAll($key);
-          $output[] = $item;
-          // If we've already reached the maximum amount given paging and offset
-          // we can stop further processing.
-          if (count($output) >= $top) {
-            break;
+          if (($item = $this->client->hGetAll($key)) && !empty($item)) {
+            $output[] = $item;
+            // If we've already reached the maximum amount given paging and offset
+            // we can stop further processing.
+            if (count($output) >= $top) {
+              break;
+            }
+          }
+          else {
+            // Indicates that the key list isn't up to date anymore. Schedule a
+            // rebuild.
+            $rebuild_keys = TRUE;
           }
         }
       }
+    }
+
+    // Looks like we found a key inconsistency - schedule a rebuild. Do so on
+    // shutdown when everything else is processed.
+    if ($rebuild_keys) {
+      drupal_register_shutdown_function(function(){
+        $log = Redislog::getInstance();
+        if ($log && $log->isReady()) {
+          $log->rebuildKeyList();
+        }
+      });
     }
 
     // Enforce paging.
     if ($filter) {
       $output = array_slice($output, $offset, $limit);
     }
+    array_filter($output);
 
     // Now inflate the items - this saves a ton of time to do this just here.
     foreach ($output as &$item) {

@@ -40,20 +40,30 @@ function redis_watchdog_overview() {
   }
   $limit = 50;
   $page = pager_default_initialize($log->count(), $limit);
-  foreach ($log->getMultiple($limit, $page * $limit, $order['sql'], $direction) as $log) {
-    $rows[] = array(
-      'data' => array(
-        // Cells.
-        array('class' => 'icon'),
-        l(t($log['type']), 'admin/reports/redislog/event/' . $log['wid']),
-        format_date($log['timestamp'], 'short'),
-        theme('redis_watchdog_message', array('event' => $log, 'link' => TRUE)),
-        theme('username', array('account' => $log['user'])),
-        filter_xss($log['link']),
-      ),
-      // Attributes for tr.
-      'class' => array(drupal_html_class('dblog-' . $log['type']), $classes[$log['severity']]),
-    );
+  foreach ($log->getMultiple($limit, $page * $limit, $order['sql'], $direction) as $log_entry) {
+    // We need to be very defensive, there where cases in which the log entry
+    // was broken and browsing the log caused log entries.
+    if (!empty($log_entry)) {
+      $rows[] = array(
+        'data' => array(
+          // Cells.
+          array('class' => 'icon'),
+          l(t($log_entry['type']), 'admin/reports/redislog/event/' . $log_entry['wid']),
+          format_date($log_entry['timestamp'], 'short'),
+          theme('redis_watchdog_message', array(
+            'event' => $log_entry,
+            'link' => TRUE
+          )),
+          theme('username', array('account' => $log_entry['user'])),
+          filter_xss($log_entry['link']),
+        ),
+        // Attributes for tr.
+        'class' => array(
+          drupal_html_class('dblog-' . $log_entry['type']),
+          $classes[$log_entry['severity']]
+        ),
+      );
+    }
   }
 
   $build['redis_watchdog_filter_form'] = drupal_get_form('redis_watchdog_filter_form');
