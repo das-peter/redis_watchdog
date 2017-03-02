@@ -254,7 +254,7 @@ class RedisLog implements Countable {
     // shutdown when everything else is processed.
     if ($rebuild_keys) {
       drupal_register_shutdown_function(function(){
-        $log = Redislog::getInstance();
+        $log = RedisLog::getInstance();
         if ($log && $log->isReady()) {
           $log->rebuildKeyList();
         }

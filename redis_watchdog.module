@@ -86,14 +86,14 @@ function redis_watchdog_menu() {
  * @see hook_watchdog()
  */
 function redis_watchdog_watchdog(array $entry) {
-  $q = Redislog::getInstance();
+  $q = RedisLog::getInstance();
   if ($q->isReady()) {
     $q->log($entry);
   }
 }
 
 function _redis_watchdog_get_message_types() {
-  $log = Redislog::getInstance();
+  $log = RedisLog::getInstance();
   if ($log->isReady()) {
     return $log->getMessageTypes();
   }
