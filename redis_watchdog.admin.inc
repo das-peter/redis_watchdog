@@ -34,7 +34,7 @@ function redis_watchdog_overview() {
   $order = tablesort_get_order($header);
   $direction = tablesort_get_sort($header);
 
-  $log = RedisLog::getInstance();
+  $log = WatchdogRedisLog::getInstance();
   if (!$log->isReady()) {
     return t('Logger is not ready. Please check the configuration. %exception', array('%exception' => (string) $log->getException()));
   }
@@ -85,7 +85,7 @@ function redis_watchdog_overview() {
  * Menu callback; displays details about a log message.
  */
 function redis_watchdog_event($id) {
-  $log = RedisLog::getInstance();
+  $log = WatchdogRedisLog::getInstance();
 
   drupal_add_css(drupal_get_path('module', 'dblog') . '/dblog.css');
   drupal_add_css(drupal_get_path('module', 'redis_watchdog') . '/redis_watchdog.css');
@@ -338,7 +338,7 @@ function redis_watchdog_clear_log_form($form) {
  */
 function redis_watchdog_clear_log_submit() {
   $_SESSION['redis_watchdog_overview_filter'] = array();
-  $log = RedisLog::getInstance();
+  $log = WatchdogRedisLog::getInstance();
   $log->clear();
 
   drupal_set_message(t('Redis log cleared.'));
@@ -369,7 +369,7 @@ function redis_watchdog_top($type) {
   $order = tablesort_get_order($header);
   $direction = tablesort_get_sort($header);
 
-  $log = RedisLog::getInstance();
+  $log = WatchdogRedisLog::getInstance();
   $limit = 30;
   $page = pager_default_initialize(count($log->countTopAll($type)), $limit);
   $rows = array();

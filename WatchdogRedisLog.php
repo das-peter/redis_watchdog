@@ -7,7 +7,7 @@
 /**
  * Class RedisLog.
  */
-class RedisLog implements Countable {
+class WatchdogRedisLog implements Countable {
   /**
    * @var Redis_Client
    */
@@ -31,7 +31,7 @@ class RedisLog implements Countable {
    */
   public static function getInstance() {
     if (!isset(self::$instance)) {
-      self::$instance = new RedisLog();
+      self::$instance = new WatchdogRedisLog();
     }
     return self::$instance;
   }
@@ -254,7 +254,7 @@ class RedisLog implements Countable {
     // shutdown when everything else is processed.
     if ($rebuild_keys) {
       drupal_register_shutdown_function(function(){
-        $log = RedisLog::getInstance();
+        $log = WatchdogRedisLog::getInstance();
         if ($log && $log->isReady()) {
           $log->rebuildKeyList();
         }
